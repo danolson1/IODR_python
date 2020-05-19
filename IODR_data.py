@@ -106,10 +106,12 @@ class IODR:
     
         # perform the request to get data from thingspeak
         df = get_data(self.chID, start_date, end_date)
+        num_data_chunks = 0
         
         # if all of the data wasn't collected, because it was more than 8000 points, do another request
         while (got_all_data(start_date, df) is False):
-            print('getting more data...')
+            num_data_chunks += 1
+            print(f'getting more data, request #{num_data_chunks}...')
             df_extra = get_data(self.chID, start_date, df.index[0].strftime("%Y-%m-%d %H:%M"))
             df = pd.concat([df, df_extra]).drop_duplicates().sort_index()
             
