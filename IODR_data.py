@@ -6,7 +6,6 @@
 #
 # Notes on use:
 #  - get_all_data() is the main function for getting IODR data
-#  - 
 #
 # copied from IODR - LL1592 ethnol adaptation.ipynb notebook
 # C:\Users\Dan\Documents\Lynd Lab research\Ctherm CBP project\high ethanol adaptation for C therm 9-30-2019\IODR - LL1592 ethanol adaptation v5.ipynb

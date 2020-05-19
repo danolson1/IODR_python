@@ -7,9 +7,6 @@
 # Notes on use:
 # copied from IODR - LL1592 ethnol adaptation.ipynb notebook
 # C:\Users\Dan\Documents\Lynd Lab research\Ctherm CBP project\high ethanol adaptation for C therm 9-30-2019\IODR - LL1592 ethanol adaptation v5.ipynb
-#
-# To-do
-# - set up log messages
 ###############################################################################
 
 # perform required imports
@@ -48,6 +45,15 @@ def gompertz_curve(t, A, umax, lag, offset):
 
 def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_distance = 10, smoothing_window = 10, peak_prominence = 0.005, show_graphs = True, epsilon = 0.1):
     """
+    Find the min, max, and midpoint of data
+    Find all of the locations where the data crosses the midpoint. This should only happen once. If it happens more than once, take the first crossing, and send a warning message (could be multiple growth curves in the same dataset, could be noise in the data)
+    Find all of the peaks in the data set higher than the midpoint
+    Find all of the troughs in the data set lower than the midpoint (invert the data and find peaks)
+    From the midpoint, find the previous trough
+    From the midpoint, find the next peak
+    Select the region of data that includes: trough, midpoint, peak
+    Fit a Gompertz curve to the data. Plot the results. Show the fit 
+    
     data: a Pandas dataframe with the following columns:
         OD: absorbance data at 600 nm
         etime: elapsed time in days
@@ -90,11 +96,11 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
     data['cross'] = ((data.smooth <= midOD) & (data.nextOD > midOD))
     
     if data['cross'].sum() == 0:
-        print('WARNING: no midpoint crossings')
-        return # we can't do any more calculations, so return
+        logger.info('WARNING: no midpoint crossings')
+        return # we can't do any more calculations, so return. This will probably cause an error because the calling function is expecting a series
     else:
         if data['cross'].sum() >= 2: 
-            print('WARNING: more than 1 midpoint crossing')
+            logger.info('WARNING: more than 1 midpoint crossing')
 
         # find the index of the first crossing, if there are more than one    
         cross_idx = data.loc[data.cross, :].sort_values('etime', ascending = True).index[0] 
@@ -130,9 +136,9 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
         trough_idx = troughDf.loc[before_crossing, 'etime'].index[-1] # get the last index in the dataframe
 
     
-    #print('trough_idx=', trough_idx)
-    #print('cross_idx=', cross_idx)
-    #print('peak_idx=', peak_idx)
+    logger.debug(f'trough_idx={trough_idx}')
+    logger.debug(f'cross_idx={cross_idx}')
+    logger.debug(f'peak_idx={peak_idx}')
 
     # select data for fitting curve
     # use the data from the first trough before the midpoint crossing to the first peak after the midpoint crossing
@@ -154,9 +160,9 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
     lag_init = data2.iloc[0].loc['etime']
     offset_init = np.log(minOD)
     p0 = [A_init, umax_init, lag_init, offset_init] # initial guess for A, umax, lag, offset
-    #print('min=', data2.iloc[0].loc['etime'])
-    #print('max=', data2.iloc[-1].loc['etime'])
-    #print('p0= ', p0)
+    logger.debug(f"min={data2.iloc[0].loc['etime']}")
+    logger.debug(f"max={data2.iloc[-1].loc['etime']}")
+    logger.debug(f"p0 ={p0}")
     try:
 
         popt, pcov = curve_fit(gompertz_curve, 
@@ -169,10 +175,8 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
                               )
         gomp_x = np.linspace(data['etime'].min(), data['etime'].max(), 50)
         gomp_y = gompertz_curve(gomp_x, *popt)
-        perr = np.sqrt(np.diag(pc))
+        perr = np.sqrt(np.diag(pcov))
     except:
-        #print('exception')
-        #return 
         raise
     
     # perform linear curve fit on sliding window
@@ -181,16 +185,15 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
     data2['umax_slope_err'] = 0
     data2['icept'] = 0
     for index, row in data2.iloc[fit_window:-fit_window].iterrows():
-        data3 = data2.loc[index-window:index+window]
+        data3 = data2.loc[index-fit_window:index+fit_window]
         slope, intercept, r_value, p_value, std_err = stats.linregress(data3.etime, data3.lnOD)
-        #print(slope, ' ', std_err)
         data2.loc[index, 'u'] = slope
         data2.loc[index, 'u_err'] = std_err
         data2.loc[index, 'icept'] = intercept
     
     umax_index = data2.loc[data2.u == data2.u.max(), :].index[0]
     # make a dataframe with the points used for the linear fit, for plotting
-    data3 = data2.loc[umax_index-window:umax_index+window]
+    data3 = data2.loc[umax_index-fit_window:umax_index+fit_window]
     lin_x = np.linspace(data3.etime.min(), data3.etime.max(), 10)
     lin_y = linear_curve(lin_x, data2.loc[umax_index, 'u'], data2.loc[umax_index, 'icept'])
     
@@ -234,10 +237,10 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
         ax2.plot(lin_x, lin_y, label = 'linear fit', color = 'green', alpha = 0.5, linewidth = 6)
         ax2.legend()
 
-        #print('A, umax, lag, offset')
-        #print(popt)
-        #print('minOD, midOD, maxOD')
-        #print(",".join("{:.2f}".format(x) for x in [minOD, midOD, maxOD]))
+        logger.debug('A, umax, lag, offset')
+        logger.debug(popt)
+        logger.debug('minOD, midOD, maxOD')
+        logger.debug(",".join("{:.2f}".format(x) for x in [minOD, midOD, maxOD]))
         plt.show()
     
     return result_ser
