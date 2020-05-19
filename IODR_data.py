@@ -62,7 +62,7 @@ class IODR:
             return True
     
     
-    def thingspeak_to_df(chID, start_date, end_date = dt.datetime.now().strftime("%Y-%m-%d %H:%M")):
+    def thingspeak_to_df(start_date, end_date = dt.datetime.now().strftime("%Y-%m-%d %H:%M")):
         """
         Get data from Thingspeak, single request
         Return as a dataframe with time in UTC timezone
@@ -76,7 +76,7 @@ class IODR:
         end_date_UTC = local_to_UTC(end_date)
         logger.info('getting data from {start} to {end}, in UTC timezone'.format(start = start_date_UTC, end = end_date_UTC))
         myUrl = 'https://api.thingspeak.com/channels/{channel_id}/feeds.csv?start={start}&end={end}'.format(
-            channel_id = chID, start = start_date_UTC, end = end_date_UTC)
+            channel_id = self.chID, start = start_date_UTC, end = end_date_UTC)
         logger.debug(myUrl)
         r = requests.get(myUrl)
         logger.debug('First 200 characters of HTTP request, for troubleshooting')
@@ -97,19 +97,19 @@ class IODR:
         return df2
         
         
-    def get_all_data(chID, start_date, end_date):
+    def get_all_data(start_date, end_date):
         """
         Get all requested data from Thingspeak, making multiple requests if needed
         Return the results as a Pandas DataFrame
         """
     
         # perform the request to get data from thingspeak
-        df = thingspeak_to_df(chID, start_date, end_date)
+        df = thingspeak_to_df(start_date, end_date)
         
         # if all of the data wasn't collected, because it was more than 8000 points, do another request
         while (got_all_data(start_date, df) is False):
             print('getting more data...')
-            df_extra = thingspeak_to_df(chID, start_date, df.index[0].strftime("%Y-%m-%d %H:%M"))
+            df_extra = thingspeak_to_df(start_date, df.index[0].strftime("%Y-%m-%d %H:%M"))
             df = pd.concat([df, df_extra]).drop_duplicates().sort_index()
             
         df2 = df.copy()
