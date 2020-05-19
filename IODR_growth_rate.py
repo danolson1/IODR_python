@@ -7,6 +7,9 @@
 # Notes on use:
 # copied from IODR - LL1592 ethnol adaptation.ipynb notebook
 # C:\Users\Dan\Documents\Lynd Lab research\Ctherm CBP project\high ethanol adaptation for C therm 9-30-2019\IODR - LL1592 ethanol adaptation v5.ipynb
+#
+# To-do
+# - set up log messages
 ###############################################################################
 
 # perform required imports
@@ -16,6 +19,11 @@ from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 from matplotlib import pyplot as plt
 from scipy import stats # for sliding window slope measurements
+import logging
+
+# set up logging
+logger = logging.getLogger(__name__) # ensure log messages have correct module name
+
 
 def linear_curve(t, a, b):
     """
