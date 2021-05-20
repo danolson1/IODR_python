@@ -28,6 +28,7 @@ def linear_curve(t, a, b):
     """
     return a*t + b
 
+
 def gompertz_curve(t, A, umax, lag, offset):
     """
     fit data to 3-parameter logistic Gompertz equation
@@ -42,6 +43,137 @@ def gompertz_curve(t, A, umax, lag, offset):
     y = A * np.exp(-np.exp(((umax * np.exp(1))/(A))*(lag - t) + 1)) + offset
     return(y)
     
+    
+def flag_sigmoidal_data(data_in, smoothing_window = 0.2, peak_height_factor = 0.75, show_graphs = False, name = ''):
+    """
+    Given a set of experimental data that should follow a sigmoidal pattern, identify the data that could
+    in theory be modeled by a sigmoidal equation.  
+    
+    Parameters:
+      data_in:            (Pandas dataframe) The first is x-data, and the second is y-data
+      smoothing_window:   (float) Smoothing window, value from 0 to 1 that represents the fraction
+                          of data to use for smoothing. In general, increasing this value will create 
+                          a smoother curve, which causes more data to be flagged as good.
+      peak_height_factor: (float) Allows for selecting secondary peaks. Float with values of 0 to 1. 
+                          Values closer to 1 select more data.
+      show_graphs:        (bool) Show graphs that visually indicate how data is being selected
+      name:               (string) For labeling graphs when analyzing several sets of data
+      
+    Returns: a Pandas boolean series indicating data that should be used for sigmoidal fitting
+    """
+    data = data_in.iloc[:, 0:2].copy() # make a copy to avoid modifying the original dataframe
+    data.columns = pd.Index(['time', 'data'])
+    data['good_data'] = False # column to hold good data flag
+    
+    # smooth data to eliminate outliers
+    smoothing_window_pts = int(len(data)*smoothing_window)
+    if smoothing_window_pts >= len(data):
+        smoothing_window_pts  = len(data)-1 # if the smoothing window is larger than the number of points, make it smaller
+    if (smoothing_window_pts % 2) == 0:
+        smoothing_window_pts += 1 # if the smoothing window has an even number of points, add one
+                                  # this is important for the Savitsky-Golay filtering
+    logger.debug(f'smoothing_window_pts: {smoothing_window_pts}')        
+    data['smooth'] = savgol_filter(data['data'], 
+                                 window_length = smoothing_window_pts, 
+                                 polyorder = 1, 
+                                 deriv = 0,
+                                 mode = 'interp')
+    
+    # differentiate data to find the region of maximum growth
+    data['diff'] = np.gradient(data['smooth'])
+    diff_max = data['diff'].max()
+    if np.isnan(diff_max):
+        logger.warning(f'well {well_id} has no maximum value for the differentiated data: no usable data found')
+        diff_max = 0
+        #return data['good_data']
+    
+    data['key_points'] = '' # column to hold information about peaks, troughs, zero crossings, etc.
+    data.loc[data['diff'].dropna().head(1).index, 'key_points'] = 'start'
+    data.loc[data['diff'].dropna().tail(1).index, 'key_points'] = 'end'
+    
+    # the highest point is a peak (although the scipy peak finder won't choose it)
+    data.loc[data['diff'].idxmax(),'key_points'] = 'peak'
+    
+    # find peaks and troughs
+    peaks, _ = find_peaks(data['diff'], height = diff_max * peak_height_factor, distance = smoothing_window_pts) 
+    data.loc[data.iloc[peaks].index,'key_points'] = 'peak'
+    
+    troughs, _ = find_peaks(data['diff']*-1, distance = smoothing_window_pts, height = -diff_max*(1-peak_height_factor)) 
+    data.loc[data.iloc[troughs].index,'key_points'] = 'trough'
+    
+    # find zero crossings
+    s = data['diff'].apply(np.sign).diff().dropna().abs()
+    zero_cross = s[s > 0.0]
+    data.loc[zero_cross.index, 'key_points'] = 'zero crossing'
+    
+    # select good data
+    kp_df = data[data.key_points != ''].copy()
+    
+    # if there's more than one peak, the data may have to be manually analyzed
+    if len(kp_df[kp_df.key_points == 'peak']) > 1:
+        logger.warning(f'well {well_id} has more than one differential peak, data may need to be manually masked')
+        
+    # calculate the width of each peak
+    kp_df['peak_width'] = 0 # column to hold information about peak width
+    kp_df['idx_start'] = '' # columns to hold pairs of index values to mark the start and end of each peak
+    kp_df['idx_end'] = '' # columns to hold pairs of index values to mark the start and end of each peak
+    for index, row in kp_df[kp_df.key_points == 'peak'].iterrows():
+        
+        # find all of the key points (that aren't another peak) before the current peak
+        before_points = kp_df[(kp_df.key_points != 'peak') & (kp_df.time < row.time)]
+        # if there are no key points before the current peak
+        if len(before_points) == 0:
+            peak_start = row.name # set the start index to the current peak
+        else:
+            # find the last of these points, and save the index value
+            peak_start = before_points.iloc[-1].name
+        
+        # find all of the key points (that aren't another peak) after the current peak
+        after_points = kp_df[(kp_df.key_points != 'peak') & (kp_df.time > row.time)]
+        # if there are no key points after the current peak
+        if len(after_points) == 0:
+            peak_end = row.name # set the start index to the current peak
+        else:
+            # find the first of these points, and save the index value
+            peak_end = after_points.iloc[0].name
+                   
+        # calculate the peak width
+        kp_df.loc[index, 'peak_width'] = kp_df.loc[peak_end, 'time'] - kp_df.loc[peak_start, 'time']
+        kp_df.loc[index, 'idx_start'] = peak_start
+        kp_df.loc[index, 'idx_end'] = peak_end
+        
+    # Find the widest peak, and flag that data as good
+    if len(kp_df[kp_df.key_points == 'peak']) > 0:
+        best_peak = kp_df.peak_width.idxmax()
+        best_start_idx = kp_df.loc[best_peak, 'idx_start']
+        best_end_idx = kp_df.loc[best_peak, 'idx_end']
+        data.loc[best_start_idx:best_end_idx, 'good_data'] = True
+    
+    if show_graphs:
+        fig, (ax1, ax2) = plt.subplots(1, 2, sharex =True, figsize = (20,8))
+
+        # First panel
+        ax1.set_title(f'{name} input data')
+        ax1.plot(data['time'], data['smooth'], label = 'smooth', color = 'brown')
+        ax1.plot(data['time'], data['data'], label = 'raw input', color = 'green')
+        ax1.plot(data.loc[data.good_data, 'time'], data.loc[data.good_data, 'data'], label = 'good data', linewidth = 8, color = 'green', alpha = 0.3)
+        ax1.scatter(data.loc[zero_cross.index]['time'], data.loc[zero_cross.index]['smooth'], marker = 'o', color = 'blue', zorder = 2.5, label = 'zero crossing')
+        ax1.legend()
+        
+        # Second panel
+        ax2.set_title(f'{name} derivative')
+        ax2.axhline(0, linestyle = "--", color = 'blue', alpha = 0.5, label = 'zero crossing')
+        ax2.axhline(peak_height_factor * diff_max, linestyle = "--", color = 'green', alpha = 0.5, label = 'min peak height')
+        ax2.axhline((1- peak_height_factor) * diff_max, linestyle = "--", color = 'red', alpha = 0.5, label = 'max trough height')    
+        ax2.scatter(data.loc[data.key_points == 'peak', 'time'], data.loc[data.key_points == 'peak', 'diff'], marker = 'o', color = 'green', zorder = 2.5, label = 'peak')
+        ax2.scatter(data.iloc[troughs]['time'], data.iloc[troughs]['diff'], marker = 'o', color = 'red', zorder = 2.5, label = 'valley')
+        ax2.scatter(data.loc[zero_cross.index]['time'], data.loc[zero_cross.index]['diff'], marker = 'o', color = 'blue', zorder = 2.5, label = 'zero crossing')
+        ax2.plot(data.loc[data.good_data, 'time'], data.loc[data.good_data, 'diff'], label = 'good data', linewidth = 8, color = 'green', alpha = 0.3)
+        ax2.plot(data['time'], data['diff'], label = 'diff', marker = '.', color = 'darkorange' )
+        ax2.legend()
+        
+    return data['good_data']
+
 
 def growth_analysis(data_in, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_distance = 10, smoothing_window = 10, peak_prominence = 0.005, show_graphs = True, epsilon = 0.1):
     """
