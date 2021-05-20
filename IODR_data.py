@@ -21,10 +21,15 @@ import io
 import logging
 
 # set ThingSpeak variables
-# 3 sets of data, since there are 3 IODR devices
+# Each ThingSpeak channel can only hold 8 data streams, so I am storing temperature for all 3 devices in a separate channel
+# IODR device numbers (as of 10-27-2020)
+# 1: device in Zeppelin chamber
+# 2: device in Montgolfier chamber
+# 3: 
+# 4: temperature readings for all devices
 tsBaseUrl = r'https://api.thingspeak.com/channels'
-chIDs = [405675, 441742, 469909]
-readAPIkeys = ['18QZSI0X2YZG8491', 'CV0IFVPZ9ZEZCKA8', '27AE8M5DG8F0ZE44']
+chIDs = [405675, 441742, 469909, 890567]
+readAPIkeys = ['18QZSI0X2YZG8491', 'CV0IFVPZ9ZEZCKA8', '27AE8M5DG8F0ZE44', 'M7RIW6KSSW15OGR1']
 local_tz = pytz.timezone('US/Eastern')
 
 # set up logging

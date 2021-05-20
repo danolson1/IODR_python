@@ -43,7 +43,7 @@ def gompertz_curve(t, A, umax, lag, offset):
     return(y)
     
 
-def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_distance = 10, smoothing_window = 10, peak_prominence = 0.005, show_graphs = True, epsilon = 0.1):
+def growth_analysis(data_in, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_distance = 10, smoothing_window = 10, peak_prominence = 0.005, show_graphs = True, epsilon = 0.1):
     """
     Find the min, max, and midpoint of data
     Find all of the locations where the data crosses the midpoint. This should only happen once. If it happens more than once, take the first crossing, and send a warning message (could be multiple growth curves in the same dataset, could be noise in the data)
@@ -70,6 +70,8 @@ def growth_analysis(data, init_OD = 0.01, reliable_OD_range = (0.03, 1), peak_di
         umax_slope: maximum growth rate as determined by slope of log-transformed data
         umax_slope_err: emax standard error from slope fit
     """
+    # make a copy of the input dataframe
+    data = data_in.copy()
     
     # set elapsed time to hours
     data['etime'] = data['etime']*24 # convert days to hours
