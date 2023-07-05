@@ -103,6 +103,9 @@ def optimize_blank_value(abs600, min_abs_ratio = 0.01, display_output = False):
     """
     data = abs600.iloc[:, 0:2].dropna().copy() # make a copy to avoid modifying the original dataframe
     data.columns = pd.Index(['time', 'abs600'])
+    if len(data) < 1:
+        logger.warning('not enough input data')
+        return(0,0)
     
     if (display_output):
         fig, ax = plt.subplots() # create axes object for subsequent graphs
