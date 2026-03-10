@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iodr"
+version = "0.1.0"
+description = "Library for collecting and analyzing data from the Internet Optical Density Reader (IODR)"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.7"
+dependencies = [
+    "pandas",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "scikit-learn",
+    "requests",
+    "pytz",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["iodr*"]

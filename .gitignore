@@ -2,3 +2,6 @@
 *.ipynb
 *.pyc
 platereaer_example_data_clean.txt
+*.egg-info/
+.ipynb_checkpoints/
+.claude/
