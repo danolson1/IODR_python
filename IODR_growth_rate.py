@@ -374,8 +374,55 @@ def flag_log_phase_data(abs600, smoothing_window = 0.2, show_graphs = False, ret
         return data
     
     return data['good_data']
-    
-    
+
+
+def calculate_growth_rate(abs600, smoothing_window=0.1, low_cutoff=-3.5,
+                          growth_rate_window=3, min_rsq=0.995,
+                          show_graphs=False, name=''):
+    """
+    Calculate the maximum growth rate from raw absorbance data.
+
+    Parameters:
+      abs600:             Pandas dataframe with at least two columns:
+                            1st column - time (float) in hours
+                            2nd column - raw absorbance data (float)
+      smoothing_window:   (float) Smoothing window for flag_log_phase_data
+      low_cutoff:         (float) Minimum ln(blank-subtracted) value for growth rate calculation
+      growth_rate_window: (float) Time window (hours) for sliding linear fit
+      min_rsq:            (float) Minimum R-squared for linear fits
+      show_graphs:        (bool) Show graphs of intermediate steps
+      name:               (string) Name label for graphs
+
+    Returns:
+      fit_result: Pandas series with fitting parameters (umax, u_err, icept, i_err, rsq, umax_time)
+      fit_data:   Pandas dataframe with intermediate data
+    """
+    data = abs600.iloc[:, 0:2].dropna().copy()
+    data.columns = pd.Index(['time_h', 'abs600'])
+
+    # 1. Flag log-phase data
+    good_rows = flag_log_phase_data(data, smoothing_window=smoothing_window,
+                                    show_graphs=show_graphs, return_all_data=False, name=name)
+    data['good_data'] = good_rows
+
+    # 2. Optimize blank value using log-phase data
+    blk_val, blk_fit = optimize_blank_value(data[good_rows], min_abs_ratio=0.01,
+                                             display_output=show_graphs)
+    logger.info(f'blk_val = {blk_val:.4f},  R² = {blk_fit:.4f}')
+
+    # 3. Blank-subtract and log-transform
+    data['blank'] = data['abs600'] - blk_val
+    data['ln_blk'] = np.log(data['blank'])
+
+    # 4. Mask data below the low cutoff
+    data.loc[data['ln_blk'] < low_cutoff, 'good_data'] = False
+
+    # 5. Fit maximum growth rate with sliding window
+    fit_result, fit_data = linear_fit(data[['time_h', 'ln_blk', 'good_data']],
+                                      window_size=growth_rate_window,
+                                      show_graphs=show_graphs, min_rsq=min_rsq, name=name)
+    return fit_result, fit_data
+
 
 def flag_sigmoidal_data(data_in, smoothing_window = 0.2, peak_height_factor = 0.75, show_graphs = False, name = ''):
     """
