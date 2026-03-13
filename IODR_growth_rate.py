@@ -233,6 +233,7 @@ def linear_fit(data_in, min_rsq = 0.98, window_size = 3, show_graphs = False, na
         good_r2 = data.rsq.notnull() & (data.rsq > min_rsq) # find rows with good R-squared data
         ax2.plot(data.time, data.data.mask(~good_r2), label = 'good $R^2$', color = 'orange', alpha = 0.3, linewidth = 8)
         ax2.plot(lin_x, lin_y, label = 'fit', color = 'green', linewidth = 10, alpha = 0.7)
+        ax2.set_ylim(bottom=max(-6, ax2.get_ylim()[0]))
         ax2.legend()
 
     return result, data
@@ -344,17 +345,17 @@ def flag_log_phase_data(abs600, smoothing_window = 0.2, show_graphs = False, ret
     # find maximum and minimum values, use rolling window to filter out noise
     max_abs = data.data.rolling(10).median().max()
     min_abs = data.data.rolling(10).median().min()
-    max_index = data.data.idxmax()
-    min_index = data.data.idxmin()
-    max_slope_index = data.query('diff == diff.max()').head(1).index[0]
-    
+    max_index = data.data.idxmax()                                              # max OD, from all data
+    max_slope_index = data.loc[data.index < max_index, 'diff'].idxmax()        # max slope, before max OD
+    min_slope_index = data.loc[data.index < max_slope_index, 'diff'].idxmin()  # min slope, before max slope
+
     # identify key points
     data.loc[max_index, 'key_points'] = 'max'
-    data.loc[min_index, 'key_points'] = 'min'
     data.loc[max_slope_index, 'key_points'] = 'max_slope'
+    data.loc[min_slope_index, 'key_points'] = 'min_slope'
 
-    # flag data between 'min' and 'max_slope' as good
-    data.loc[(data.index > min_index) & (data.index < max_slope_index), 'good_data'] = True
+    # flag data between 'min_slope' and 'max_slope' as good
+    data.loc[(data.index > min_slope_index) & (data.index < max_slope_index), 'good_data'] = True
     logger.info(f'min_abs={min_abs}, max_abs={max_abs}')
     
     if show_graphs:    
