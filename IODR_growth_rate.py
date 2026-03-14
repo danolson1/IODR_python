@@ -48,6 +48,8 @@ def test_blank_subtraction(blank_value, abs600, min_abs_ratio = 0.01, display_ou
     
     # try a blank value
     data['blank'] = data['abs600'] - blank_value
+    data = data[data['blank'] > 0]
+    logger.debug(f'test_blank_subtraction: blank_value={blank_value:.4f}, {len(data)} rows after filtering non-positive')
     data['ln_blank'] = np.log(data['blank'])
     data.dropna(inplace = True)
 
@@ -346,8 +348,12 @@ def flag_log_phase_data(abs600, smoothing_window = 0.2, show_graphs = False, ret
     max_abs = data.data.rolling(10).median().max()
     min_abs = data.data.rolling(10).median().min()
     max_index = data.data.idxmax()                                              # max OD, from all data
-    max_slope_index = data.loc[data.index < max_index, 'diff'].idxmax()        # max slope, before max OD
-    min_slope_index = data.loc[data.index < max_slope_index, 'diff'].idxmin()  # min slope, before max slope
+
+    before_max = data.loc[data.index < max_index, 'diff']
+    max_slope_index = before_max.idxmax() if len(before_max) > 0 else data['diff'].idxmax()
+
+    before_max_slope = data.loc[data.index < max_slope_index, 'diff']
+    min_slope_index = before_max_slope.idxmin() if len(before_max_slope) > 0 else data.index[0]
 
     # identify key points
     data.loc[max_index, 'key_points'] = 'max'
@@ -397,6 +403,7 @@ def calculate_growth_rate(abs600, smoothing_window=0.1, low_cutoff=-3.5,
       fit_result: Pandas series with fitting parameters (umax, u_err, icept, i_err, rsq, umax_time)
       fit_data:   Pandas dataframe with intermediate data
     """
+    logger.debug(f'calculate_growth_rate: {name}')
     data = abs600.iloc[:, 0:2].dropna().copy()
     data.columns = pd.Index(['time_h', 'abs600'])
 
@@ -410,8 +417,9 @@ def calculate_growth_rate(abs600, smoothing_window=0.1, low_cutoff=-3.5,
                                              display_output=show_graphs)
     logger.info(f'blk_val = {blk_val:.4f},  R² = {blk_fit:.4f}')
 
-    # 3. Blank-subtract and log-transform
+    # 3. Blank-subtract, drop non-positive values, and log-transform
     data['blank'] = data['abs600'] - blk_val
+    data = data[data['blank'] > 0]
     data['ln_blk'] = np.log(data['blank'])
 
     # 4. Mask data below the low cutoff
