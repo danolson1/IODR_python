@@ -355,13 +355,18 @@ def flag_log_phase_data(abs600, smoothing_window = 0.2, show_graphs = False, ret
     before_max_slope = data.loc[data.index < max_slope_index, 'diff']
     min_slope_index = before_max_slope.idxmin() if len(before_max_slope) > 0 else data.index[0]
 
+    # end point: halfway in time between max_slope and max_abs
+    mid_time = (data.loc[max_slope_index, 'time'] + data.loc[max_index, 'time']) / 2
+    mid_index = (data['time'] - mid_time).abs().idxmin()
+
     # identify key points
     data.loc[max_index, 'key_points'] = 'max'
     data.loc[max_slope_index, 'key_points'] = 'max_slope'
     data.loc[min_slope_index, 'key_points'] = 'min_slope'
+    data.loc[mid_index, 'key_points'] = 'mid'
 
-    # flag data between 'min_slope' and 'max_slope' as good
-    data.loc[(data.index > min_slope_index) & (data.index < max_slope_index), 'good_data'] = True
+    # flag data from 'min_slope' to midpoint between max_slope and max_abs as good
+    data.loc[(data.index > min_slope_index) & (data.index <= mid_index), 'good_data'] = True
     logger.info(f'min_abs={min_abs}, max_abs={max_abs}')
     
     if show_graphs:    
